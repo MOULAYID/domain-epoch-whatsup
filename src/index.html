@@ -1,0 +1,79 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Domain Epoch Follow-ups</title><meta name="description" content="Private WhatsApp follow-up workspace for Domain Epoch.">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23111c2f'/%3E%3Cpath d='M16 16h15c12 0 19 6 19 16s-7 16-19 16H16V16zm11 9v14h5c5 0 8-2 8-7s-3-7-8-7h-5z' fill='%2325d366'/%3E%3C/svg%3E">
+<style>
+:root{color-scheme:dark;--bg:#08101d;--panel:#111c2f;--panel2:#16243a;--line:#2a3b58;--text:#f8fafc;--muted:#a9b7cb;--green:#25d366;--blue:#4da3ff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 Arial,sans-serif}
+header{position:sticky;top:0;z-index:5;background:rgba(8,16,29,.96);border-bottom:1px solid var(--line);backdrop-filter:blur(10px)}
+.top,main{width:min(1180px,calc(100% - 28px));margin:auto}.top{padding:18px 0 14px}h1{font-size:1.35rem;margin:0 0 14px}
+.filters{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:9px}select,input{width:100%;min-height:42px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--text);padding:8px 10px;font:inherit}
+main{padding:22px 0 60px}.summary{color:var(--muted);margin-bottom:14px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:13px}
+article{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:16px;display:flex;flex-direction:column;gap:13px}.heading{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.heading h2{font-size:1rem;margin:0}.domain{font-size:.82rem;color:#bfdbfe;margin-top:3px}
+.badge{font-size:.73rem;padding:4px 7px;border-radius:999px;background:#332c18;color:#fde68a;white-space:nowrap}.badge.verified{background:#113521;color:#86efac}
+.buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px}.buttons a{min-height:43px;display:flex;align-items:center;justify-content:center;border-radius:9px;text-decoration:none;font-weight:700;font-size:.88rem;padding:8px;text-align:center}
+.initial{border:1px solid var(--line);color:#dbeafe;background:var(--panel2)}.follow{background:var(--green);color:#052e16}.second{background:var(--blue);color:#06182b}.final{background:#e8edf5;color:#152033}
+.tracking{display:grid;grid-template-columns:1.35fr 1fr;gap:8px}.empty{padding:35px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:12px}
+@media(max-width:720px){.filters{grid-template-columns:1fr 1fr}.grid{grid-template-columns:1fr}.top,main{width:min(100% - 20px,1180px)}}@media(max-width:430px){.filters,.buttons,.tracking{grid-template-columns:1fr}}
+</style></head><body>
+<header><div class="top"><h1>Domain Epoch — WhatsApp follow-ups</h1><p class="summary">After sending a message, update the lead status and last-contact date.</p><div class="filters">
+<select id="domainFilter" aria-label="Filter by domain"><option value="">All domains</option><option>HireCarSpain.com</option><option>HireCarSaudi.com</option><option>HireCarEmirates.com</option><option>HireCarNYC.com</option></select>
+<select id="marketFilter" aria-label="Filter by market"><option value="">All markets</option><option>Spain</option><option>Saudi Arabia</option><option>United Arab Emirates</option><option>New York City</option></select>
+<select id="verificationFilter" aria-label="Filter by verification"><option value="">All numbers</option><option value="verified">Maps-verified</option><option value="candidate">Needs confirmation</option></select>
+<select id="statusFilter" aria-label="Filter by status"><option value="">All statuses</option><option>Not sent</option><option>Initial message sent</option><option>Follow-up 1 sent</option><option>Follow-up 2 sent</option><option>Replied</option><option>Interested</option><option>Not interested</option><option>Invalid number</option></select>
+</div></div></header><main><div id="summary" class="summary"></div><div id="grid" class="grid"></div></main>
+<script>
+let leads=[];
+const statusOptions=["Not sent","Initial message sent","Follow-up 1 sent","Follow-up 2 sent","Replied","Interested","Not interested","Invalid number"];
+const saved={};
+const filters=["domainFilter","marketFilter","verificationFilter","statusFilter"].map(function(id){return document.getElementById(id)});
+const wa=function(phone,text){return "https://wa.me/"+phone+"?text="+encodeURIComponent(text)};
+const esc=function(value){return String(value).replace(/[&<>"']/g,function(ch){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]})};
+function stateFor(id){return saved[id]||{status:"Not sent",date:""}}
+async function save(id,key,value){
+  const previous=Object.assign({},stateFor(id));
+  const next=Object.assign({},previous);next[key]=value;
+  saved[id]=next;
+  try{
+    const response=await fetch("/api/leads/"+encodeURIComponent(id),{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({status:next.status,last_contact_date:next.date||null})});
+    if(!response.ok)throw new Error("Save failed");
+    render();
+  }catch(error){
+    saved[id]=previous;
+    alert("The update could not be saved. Please try again.");
+    render();
+  }
+}
+function card(lead){
+  const state=stateFor(lead.id);
+  const options=statusOptions.map(function(x){return '<option '+(x===state.status?'selected':'')+'>'+x+'</option>'}).join('');
+  return '<article data-id="'+esc(lead.id)+'"><div class="heading"><div><h2>'+esc(lead.company)+'</h2><div class="domain">'+lead.domain+' · '+lead.market+'</div></div><span class="badge '+(lead.verified?'verified':'')+'">'+(lead.verified?'Maps verified':'Confirm identity')+'</span></div><div class="buttons"><a class="initial" target="_blank" rel="noopener" href="'+wa(lead.phone,lead.messages.initial)+'">Initial message</a><a class="follow" target="_blank" rel="noopener" href="'+wa(lead.phone,lead.messages.follow1)+'">Follow-up 1</a><a class="second" target="_blank" rel="noopener" href="'+wa(lead.phone,lead.messages.follow2)+'">Follow-up 2</a><a class="final" target="_blank" rel="noopener" href="'+wa(lead.phone,lead.messages.final)+'">Final follow-up</a></div><div class="tracking"><select class="lead-status" aria-label="Status for '+esc(lead.company)+'">'+options+'</select><input class="lead-date" type="date" aria-label="Last contact date for '+esc(lead.company)+'" value="'+(state.date||'')+'"></div></article>';
+}
+function bindTracking(){
+  document.querySelectorAll('article[data-id]').forEach(function(article){
+    const id=article.dataset.id;
+    article.querySelector('.lead-status').addEventListener('change',function(){save(id,'status',this.value)});
+    article.querySelector('.lead-date').addEventListener('change',function(){save(id,'date',this.value)});
+  });
+}
+function render(){
+  const values=filters.map(function(x){return x.value}),domain=values[0],market=values[1],verification=values[2],status=values[3];
+  const visible=leads.filter(function(lead){const state=stateFor(lead.id);return(!domain||lead.domain===domain)&&(!market||lead.market===market)&&(!verification||(verification==="verified"&&lead.verified)||(verification==="candidate"&&!lead.verified))&&(!status||state.status===status)});
+  document.getElementById("summary").textContent=visible.length+" of "+leads.length+" usable WhatsApp contacts";
+  document.getElementById("grid").innerHTML=visible.length?visible.map(card).join(""):'<div class="empty">No leads match these filters.</div>';
+  bindTracking();
+}
+async function load(){
+  document.getElementById("summary").textContent="Loading leads…";
+  try{
+    const response=await fetch("/api/leads");
+    if(!response.ok)throw new Error("Load failed");
+    const payload=await response.json();leads=payload.leads;
+    leads.forEach(function(lead){saved[lead.id]={status:lead.status||"Not sent",date:lead.last_contact_date||""}});
+    render();
+  }catch(error){
+    document.getElementById("summary").textContent="The database is temporarily unavailable. Refresh to try again.";
+  }
+}
+filters.forEach(function(el){el.addEventListener("change",render)});load();
+</script></body></html>
